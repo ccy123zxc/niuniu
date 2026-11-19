@@ -1,0 +1,258 @@
+using OldAlley.Core;
+using OldAlley.Enemy;
+using OldAlley.Wave;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace OldAlley.EditorTools
+{
+    /// <summary>
+    /// Stage 5：5 波配置 + WaveManager + 2.5D 地图扩展（纵深、障碍物、多路线）。
+    /// 菜单可重复执行；依赖 Stage 4 的敌人资产。
+    /// </summary>
+    public static class Stage5_SceneBuilder
+    {
+        private const string GameScene = "Assets/_Game/Scenes/Game.unity";
+        private const string Data = "Assets/_Game/Data/";
+        private const string LibPath = "Assets/_Game/Data/ArtLibrary.asset";
+
+        [MenuItem("旧巷守卫/5-构建波次与结算")]
+        public static void Run()
+        {
+            var kid = AssetDatabase.LoadAssetAtPath<EnemyStats>(Data + "Enemy_Kid.asset");
+            var speeder = AssetDatabase.LoadAssetAtPath<EnemyStats>(Data + "Enemy_Speeder.asset");
+            var fatty = AssetDatabase.LoadAssetAtPath<EnemyStats>(Data + "Enemy_Fatty.asset");
+            var king = AssetDatabase.LoadAssetAtPath<EnemyStats>(Data + "Enemy_King.asset");
+            var lib = AssetDatabase.LoadAssetAtPath<ArtLibrary>(LibPath);
+
+            if (kid == null || speeder == null || fatty == null || king == null || lib == null)
+            {
+                Debug.LogError("[Stage5] 缺少敌人资产或 ArtLibrary，请先执行「4-构建敌人与寻路」。");
+                return;
+            }
+
+            var table = EnsureTable(kid, speeder, fatty, king);
+
+            var temp = PrepareUnsavedScene();
+            try
+            {
+                var scene = EditorSceneManager.OpenScene(GameScene, OpenSceneMode.Single);
+                Build(table, lib);
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                Debug.Log("[Stage5] 波次与 2.5D 地图扩展构建完成");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temp)) AssetDatabase.DeleteAsset(temp);
+            }
+        }
+
+        // ---------- 波次资产 ----------
+
+        private static WaveTable EnsureTable(EnemyStats kid, EnemyStats speeder, EnemyStats fatty, EnemyStats king)
+        {
+            var waves = new WaveConfig[5];
+
+            waves[0] = EnsureWave(1, "放学铃响", 8f, 1.2f, 4, new[]
+            {
+                Entry(kid, 6)
+            });
+
+            waves[1] = EnsureWave(2, "隔壁班来串门", 8f, 1.0f, 6, new[]
+            {
+                Entry(kid, 8), Entry(speeder, 2)
+            });
+
+            waves[2] = EnsureWave(3, "胖墩压境", 10f, 0.9f, 8, new[]
+            {
+                Entry(kid, 8), Entry(speeder, 4), Entry(fatty, 2)
+            });
+
+            waves[3] = EnsureWave(4, "全巷总动员", 10f, 0.8f, 10, new[]
+            {
+                Entry(kid, 8), Entry(speeder, 6), Entry(fatty, 4)
+            });
+
+            waves[4] = EnsureWave(5, "孩子王驾到", 12f, 0.7f, 12, new[]
+            {
+                Entry(kid, 10), Entry(speeder, 6), Entry(fatty, 4), Entry(king, 1)
+            });
+
+            var path = Data + "WaveTable.asset";
+            var table = AssetDatabase.LoadAssetAtPath<WaveTable>(path);
+            if (table == null)
+            {
+                table = ScriptableObject.CreateInstance<WaveTable>();
+                AssetDatabase.CreateAsset(table, path);
+                Debug.Log("[Stage5] 新建 " + path);
+            }
+
+            table.waves = waves;
+            EditorUtility.SetDirty(table);
+            AssetDatabase.SaveAssets();
+            return table;
+        }
+
+        private static WaveEntry Entry(EnemyStats stats, int count)
+        {
+            return new WaveEntry { stats = stats, count = count };
+        }
+
+        private static WaveConfig EnsureWave(int index, string theme, float prep, float interval,
+            int maxAlive, WaveEntry[] entries)
+        {
+            var path = Data + "Wave_0" + index + ".asset";
+            var wave = AssetDatabase.LoadAssetAtPath<WaveConfig>(path);
+
+            if (wave == null)
+            {
+                wave = ScriptableObject.CreateInstance<WaveConfig>();
+                AssetDatabase.CreateAsset(wave, path);
+                Debug.Log("[Stage5] 新建 " + path);
+            }
+
+            wave.index = index;
+            wave.themeName = theme;
+            wave.prepTime = prep;
+            wave.spawnInterval = interval;
+            wave.maxAlive = maxAlive;
+            wave.clearBonus = 50;
+            wave.entries = entries;
+
+            EditorUtility.SetDirty(wave);
+            return wave;
+        }
+
+        // ---------- 场景 ----------
+
+        private static void Build(WaveTable table, ArtLibrary lib)
+        {
+            var spawner = UnityEngine.Object.FindObjectOfType<DebugEnemySpawner>();
+            if (spawner != null)
+            {
+                UnityEngine.Object.DestroyImmediate(spawner.gameObject);
+                Debug.Log("[Stage5] 已移除 DebugEnemySpawner");
+            }
+
+            // 扩大可玩纵深：底部碰撞下移，前景草下移让出下层路。
+            var bottom = GameObject.Find("LaneBottomCollider");
+            if (bottom != null) bottom.transform.position = new Vector3(0f, -4.6f, 0f);
+
+            var grass = GameObject.Find("Grass");
+            if (grass != null) grass.transform.position = new Vector3(0f, -5.2f, 0f);
+
+            // 地图扩展：下层路 + 带碰撞的障碍物。
+            var oldExt = GameObject.Find("[MapExt]");
+            if (oldExt != null) UnityEngine.Object.DestroyImmediate(oldExt);
+
+            var ext = new GameObject("[MapExt]");
+            BuildLowerPath(ext.transform, lib);
+            BuildObstacles(ext.transform, lib);
+
+            // 五条路线
+            var left = FindOrCreateSpawn(ext.transform, "Spawn_Left", new Vector3(-20f, -1.5f, 0f));
+            var right = FindOrCreateSpawn(ext.transform, "Spawn_Right", new Vector3(20f, -1.5f, 0f));
+            var back = FindOrCreateSpawn(ext.transform, "Spawn_Back", new Vector3(-32f, -3.6f, 0f));
+            var lowerLeft = FindOrCreateSpawn(ext.transform, "Spawn_LowerLeft", new Vector3(-24f, -4.0f, 0f));
+            var lowerRight = FindOrCreateSpawn(ext.transform, "Spawn_LowerRight", new Vector3(24f, -4.0f, 0f));
+
+            var old = GameObject.Find("[WaveManager]");
+            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+
+            var managerGo = new GameObject("[WaveManager]", typeof(WaveManager));
+            var manager = managerGo.GetComponent<WaveManager>();
+
+            manager.table = table;
+            manager.pool = UnityEngine.Object.FindObjectOfType<EnemyPool>();
+            manager.house = UnityEngine.Object.FindObjectOfType<HouseController>();
+            manager.spawnPoints = new[] { left, right, back, lowerLeft, lowerRight };
+            manager.autoStart = true;
+
+            if (manager.pool == null || manager.house == null)
+                Debug.LogWarning("[Stage5] WaveManager 引用不完整，请检查场景。");
+        }
+
+        private static void BuildLowerPath(Transform parent, ArtLibrary lib)
+        {
+            var path = new GameObject("LowerPath", typeof(SpriteRenderer));
+            path.transform.SetParent(parent, false);
+            path.transform.position = new Vector3(0f, -4.15f, 0f);
+
+            var sr = path.GetComponent<SpriteRenderer>();
+            sr.sprite = lib.cobblestone;
+            sr.drawMode = SpriteDrawMode.Tiled;
+            sr.size = new Vector2(80f, 1.1f);
+            sr.sortingLayerName = "Background";
+            sr.sortingOrder = 1;
+        }
+
+        private static void BuildObstacles(Transform parent, ArtLibrary lib)
+        {
+            // 障碍物放在 Characters 层，用 y 排序做前后遮挡；碰撞在 Wall 层。
+            Obstacle(parent, "RockA", lib.rockCluster, new Vector3(-10f, -2.7f, 0f), 0.7f, true, 1.3f, Vector2.zero);
+            Obstacle(parent, "RockB", lib.rockCluster, new Vector3(13f, -3.2f, 0f), 0.6f, true, 1.3f, Vector2.zero);
+            Obstacle(parent, "Well", lib.well, new Vector3(8f, -3.4f, 0f), 0.8f, false, 0f, new Vector2(1.6f, 1.6f));
+            Obstacle(parent, "WoodPile", lib.woodPile, new Vector3(-4f, -3.9f, 0f), 1f, false, 0f, new Vector2(1.8f, 0.9f));
+            Obstacle(parent, "Lantern", lib.stoneLantern, new Vector3(3f, -2.2f, 0f), 0.5f, true, 0.8f, Vector2.zero);
+            Obstacle(parent, "RockC", lib.rockCluster, new Vector3(18f, -2.3f, 0f), 0.5f, true, 1.2f, Vector2.zero);
+        }
+
+        private static void Obstacle(Transform parent, string name, Sprite sprite, Vector3 position,
+            float scale, bool circle, float radius, Vector2 size)
+        {
+            var go = new GameObject(name, typeof(SpriteRenderer));
+            go.transform.SetParent(parent, false);
+            go.transform.position = position;
+            go.transform.localScale = Vector3.one * scale;
+            go.layer = Layer("Wall");
+
+            var sr = go.GetComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingLayerName = "Characters";
+            sr.sortingOrder = -Mathf.RoundToInt(position.y * 100f);
+
+            if (circle)
+            {
+                var collider = go.AddComponent<CircleCollider2D>();
+                collider.radius = radius;
+            }
+            else
+            {
+                var collider = go.AddComponent<BoxCollider2D>();
+                collider.size = size;
+            }
+        }
+
+        private static Transform FindOrCreateSpawn(Transform parent, string name, Vector3 position)
+        {
+            var go = GameObject.Find(name);
+            if (go == null)
+            {
+                go = new GameObject(name, typeof(SpawnPoint));
+                go.transform.SetParent(parent, false);
+            }
+
+            go.transform.position = position;
+            return go.transform;
+        }
+
+        private static int Layer(string name)
+        {
+            var layer = LayerMask.NameToLayer(name);
+            return layer < 0 ? 0 : layer;
+        }
+
+        private static string PrepareUnsavedScene()
+        {
+            var active = SceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(active.path)) return null;
+
+            const string tempPath = "Assets/_Game/Scenes/_Stage5Temp.unity";
+            EditorSceneManager.SaveScene(active, tempPath, false);
+            return tempPath;
+        }
+    }
+}

@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1fc5b05f73b9d340a90f74cedb0d54f, type: 3}
+  m_Name: UITheme
+  m_EditorClassIdentifier: 
+  paper: {r: 0.9490196, g: 0.9098039, b: 0.8117647, a: 1}
+  wood: {r: 0.54901963, g: 0.2901961, b: 0.19607843, a: 1}
+  outline: {r: 0.22745098, g: 0.14117648, b: 0.09411765, a: 1}
+  text: {r: 0.18039216, g: 0.12941177, b: 0.09411765, a: 1}
+  accentRed: {r: 0.7882353, g: 0.30980393, b: 0.23921569, a: 1}
+  successGreen: {r: 0.43137255, g: 0.54509807, b: 0.2901961, a: 1}
+  skyGray: {r: 0.56078434, g: 0.6392157, b: 0.6784314, a: 1}
+  shadow: {r: 0, g: 0, b: 0, a: 0.2}
+  fontTitle: 0
+  fontHeading: 0
+  fontBody: 0
+  fontSmall: 0
+  panelBorder: 0
+  panelPadding: 0

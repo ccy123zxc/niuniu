@@ -1,0 +1,36 @@
+# Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# 保留所有meta文件，非常关键
+!/[Aa]ssets/**/*.meta
+
+# 编辑器相关缓存
+/[Aa]ssets/Plugins/Editor/JetBrains*
+.vs/
+.gradle/
+ExportedObj/
+.consulo/
+
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.crash

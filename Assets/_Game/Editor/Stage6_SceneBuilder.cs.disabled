@@ -1,0 +1,172 @@
+using OldAlley.Core;
+using OldAlley.Pickup;
+using OldAlley.Player;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace OldAlley.EditorTools
+{
+    /// <summary>
+    /// Stage 6：创建 4 种童年道具配置，挂 BuffSystem，
+    /// 建 PickupSpawner 与道具模板。菜单可重复执行。
+    /// </summary>
+    public static class Stage6_SceneBuilder
+    {
+        private const string GameScene = "Assets/_Game/Scenes/Game.unity";
+        private const string LibPath = "Assets/_Game/Data/ArtLibrary.asset";
+        private const string Data = "Assets/_Game/Data/";
+
+        [MenuItem("旧巷守卫/6-构建童年道具")]
+        public static void Run()
+        {
+            var lib = AssetDatabase.LoadAssetAtPath<ArtLibrary>(LibPath);
+            if (lib == null)
+            {
+                Debug.LogError("[Stage6] 缺少 ArtLibrary。");
+                return;
+            }
+
+            var configs = EnsureConfigs(lib);
+
+            var temp = PrepareUnsavedScene();
+            try
+            {
+                var scene = EditorSceneManager.OpenScene(GameScene, OpenSceneMode.Single);
+                Build(configs, lib);
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                Debug.Log("[Stage6] 童年道具与 BUFF 构建完成");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temp)) AssetDatabase.DeleteAsset(temp);
+            }
+        }
+
+        // ---------- 配置资产 ----------
+
+        private static PickupConfig[] EnsureConfigs(ArtLibrary lib)
+        {
+            return new[]
+            {
+                EnsureOne("Pickup_Bubblegum", PickupType.Bubblegum, "泡泡糖", lib.bubblegum,
+                    new Color(1f, 0.62f, 0.76f), 0.6f, 0f, 8f),
+                EnsureOne("Pickup_TinFrog", PickupType.TinFrog, "铁皮青蛙", lib.tinFrog,
+                    new Color(0.62f, 0.86f, 0.5f), 0.45f, 0f, 8f),
+                EnsureOne("Pickup_Marble", PickupType.Marble, "弹珠", lib.marble,
+                    new Color(0.6f, 0.78f, 1f), 3f, 0.2f, 10f),
+                EnsureOne("Pickup_Latiao", PickupType.Latiao, "辣条", lib.latiao,
+                    new Color(0.95f, 0.4f, 0.34f), 18f, 0f, 0f)
+            };
+        }
+
+        private static PickupConfig EnsureOne(string name, PickupType type, string display, Sprite icon,
+            Color color, float valueA, float valueB, float duration)
+        {
+            var path = Data + name + ".asset";
+            var config = AssetDatabase.LoadAssetAtPath<PickupConfig>(path);
+
+            if (config == null)
+            {
+                config = ScriptableObject.CreateInstance<PickupConfig>();
+                AssetDatabase.CreateAsset(config, path);
+                Debug.Log("[Stage6] 新建 " + path);
+            }
+
+            config.type = type;
+            config.displayName = display;
+            config.icon = icon;
+            config.color = color;
+            config.valueA = valueA;
+            config.valueB = valueB;
+            config.duration = duration;
+            config.pickupRadius = 0.6f;
+            config.weight = 1f;
+
+            EditorUtility.SetDirty(config);
+            return config;
+        }
+
+        // ---------- 场景 ----------
+
+        private static void Build(PickupConfig[] configs, ArtLibrary lib)
+        {
+            var house = UnityEngine.Object.FindObjectOfType<HouseController>();
+            var player = UnityEngine.Object.FindObjectOfType<PlayerController>();
+
+            var oldBuff = GameObject.Find("[BuffSystem]");
+            if (oldBuff != null) UnityEngine.Object.DestroyImmediate(oldBuff);
+
+            var buffGo = new GameObject("[BuffSystem]", typeof(BuffSystem));
+            var buff = buffGo.GetComponent<BuffSystem>();
+            buff.house = house;
+            buff.maxBuffs = 3;
+
+            var old = GameObject.Find("[Stage6]");
+            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+
+            var stage = new GameObject("[Stage6]");
+
+            var spawnerGo = new GameObject("PickupSpawner", typeof(PickupSpawner));
+            spawnerGo.transform.SetParent(stage.transform, false);
+            var spawner = spawnerGo.GetComponent<PickupSpawner>();
+
+            var template = new GameObject("PickupTemplate", typeof(PickupItem), typeof(CircleCollider2D));
+            template.transform.SetParent(spawnerGo.transform, false);
+            template.layer = Layer("Pickup");
+            template.SetActive(false);
+
+            var trigger = template.GetComponent<CircleCollider2D>();
+            trigger.isTrigger = true;
+            trigger.radius = 0.6f;
+
+            var body = new GameObject("Body", typeof(SpriteRenderer));
+            body.transform.SetParent(template.transform, false);
+            body.transform.localPosition = new Vector3(0f, 0.4f, 0f);
+
+            var bodyRenderer = body.GetComponent<SpriteRenderer>();
+            bodyRenderer.sprite = lib.bubblegum;
+            bodyRenderer.sortingLayerName = "Characters";
+            bodyRenderer.sortingOrder = 900;
+
+            var shadow = new GameObject("Shadow", typeof(SpriteRenderer));
+            shadow.transform.SetParent(template.transform, false);
+            shadow.transform.localPosition = Vector3.zero;
+
+            var shadowRenderer = shadow.GetComponent<SpriteRenderer>();
+            shadowRenderer.sprite = lib.shadow;
+            shadowRenderer.sortingLayerName = "Characters";
+            shadowRenderer.sortingOrder = 899;
+
+            var item = template.GetComponent<PickupItem>();
+            item.body = bodyRenderer;
+            item.shadow = shadowRenderer;
+            item.trigger = trigger;
+            item.lifetime = 15f;
+
+            spawner.configs = configs;
+            spawner.template = item;
+            spawner.house = house;
+            spawner.player = player != null ? player.transform : null;
+            spawner.maxOnField = 2;
+        }
+
+        private static int Layer(string name)
+        {
+            var layer = LayerMask.NameToLayer(name);
+            return layer < 0 ? 0 : layer;
+        }
+
+        private static string PrepareUnsavedScene()
+        {
+            var active = SceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(active.path)) return null;
+
+            const string tempPath = "Assets/_Game/Scenes/_Stage6Temp.unity";
+            EditorSceneManager.SaveScene(active, tempPath, false);
+            return tempPath;
+        }
+    }
+}

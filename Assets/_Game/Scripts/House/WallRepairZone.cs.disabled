@@ -1,0 +1,10 @@
+using UnityEngine;
+
+namespace OldAlley.Core
+{
+    /// <summary>盖在正门墙前的一块触发区，用来接住「右键点墙补砖」的射线。</summary>
+    public class WallRepairZone : MonoBehaviour
+    {
+        public WallController wall;
+    }
+}

@@ -1,0 +1,584 @@
+using OldAlley.CameraSystem;
+using OldAlley.Core;
+using OldAlley.Wave;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace OldAlley.EditorTools
+{
+    /// <summary>
+    /// Stage 2（电影感 2.5D）：1990 年代山区老巷。
+    /// 构图：巨树框景 + 头顶枝干 + 层叠飞檐 + 石灯 + 浓雾 + 落花；巷道 180 世界单位。
+    /// 菜单可重复执行，每次重建 [World]。
+    /// </summary>
+    public static class Stage2_SceneBuilder
+    {
+        private const string GameScene = "Assets/_Game/Scenes/Game.unity";
+        private const string LibPath = "Assets/_Game/Data/ArtLibrary.asset";
+
+        private const float WorldHalfWidth = 90f;
+        private const float GroundTop = 0f;
+        private const float GroundBottom = -6f;
+        private const float CameraFixedY = 1f;
+
+        [MenuItem("旧巷守卫/2-构建老巷场景")]
+        public static void Run()
+        {
+            EnsureTagsAndLayers();
+
+            var lib = AssetDatabase.LoadAssetAtPath<ArtLibrary>(LibPath);
+            if (lib == null || lib.ruralHouseBig == null || lib.treeForeground == null)
+            {
+                Debug.LogError("[Stage2] 缺少 ArtLibrary 或素材，请先执行「2-生成占位美术」。");
+                return;
+            }
+
+            var temp = PrepareUnsavedScene();
+            try
+            {
+                var scene = EditorSceneManager.OpenScene(GameScene, OpenSceneMode.Single);
+                BuildWorld(lib);
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                Debug.Log("[Stage2] 电影感 2.5D 山区老巷构建完成（宽度 180）");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temp)) AssetDatabase.DeleteAsset(temp);
+            }
+        }
+
+        // ---------------- 总装 ----------------
+
+        private static void BuildWorld(ArtLibrary lib)
+        {
+            var cam = Camera.main;
+            if (cam == null)
+            {
+                var camGo = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
+                camGo.tag = "MainCamera";
+                cam = camGo.GetComponent<Camera>();
+            }
+
+            cam.orthographic = true;
+            cam.orthographicSize = 5.625f;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color32(232, 226, 208, 255);
+            cam.transform.position = new Vector3(0f, CameraFixedY, -10f);
+            cam.nearClipPlane = 0.1f;
+            cam.farClipPlane = 100f;
+
+            var follow = cam.GetComponent<CameraFollow>();
+            if (follow == null) follow = cam.gameObject.AddComponent<CameraFollow>();
+            follow.minX = -WorldHalfWidth;
+            follow.maxX = WorldHalfWidth;
+            follow.fixedY = CameraFixedY;
+            follow.smooth = 12f;
+
+            TrySetupPixelPerfect(cam);
+            QualitySettings.antiAliasing = 0;
+
+            var old = GameObject.Find("[World]");
+            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+
+            var world = new GameObject("[World]");
+
+            BuildSky(world.transform, lib);
+            BuildGround(world.transform, lib);
+            BuildTempleLayer(world.transform, lib);
+            BuildVillage(world.transform, lib);
+            BuildVegetation(world.transform, lib);
+            BuildProps(world.transform, lib);
+            BuildMist(world.transform, lib);
+            BuildLightShafts(world.transform, lib);
+            BuildForeground(world.transform, lib);
+            BuildPetals(world.transform, lib);
+            BuildPlayer(world.transform, lib, follow);
+            BuildSpawns(world.transform);
+        }
+
+        // ---------- 远景 ----------
+
+        private static void BuildSky(Transform parent, ArtLibrary lib)
+        {
+            var clouds = LayerRoot(parent, "Clouds", 0.03f);
+            for (var x = -90f; x <= 90f; x += 30f)
+                SpriteObj("Cloud", clouds, lib.cloud, new Vector3(x, 6.4f, 0f), "Background", -45);
+
+            var far = LayerRoot(parent, "Mountain_Far", 0.06f);
+            for (var x = -120f; x <= 120f; x += 6f)
+                SpriteObj("MountainFar", far, lib.mountainFar, new Vector3(x, 5.4f, 0f), "Background", -40);
+
+            var mid = LayerRoot(parent, "Mountain_Mid", 0.15f);
+            for (var x = -120f; x <= 120f; x += 6f)
+                SpriteObj("MountainMid", mid, lib.mountainMid, new Vector3(x, 4.8f, 0f), "Background", -35);
+
+            if (lib.pagodaFar != null)
+            {
+                var pagodas = LayerRoot(parent, "Pagodas", 0.22f);
+                SpriteObj("PagodaL", pagodas, lib.pagodaFar, new Vector3(-52f, 3.3f, 0f), "Background", -30)
+                    .transform.localScale = new Vector3(0.55f, 0.55f, 1f);
+                SpriteObj("PagodaR", pagodas, lib.pagodaFar, new Vector3(48f, 3.3f, 0f), "Background", -30)
+                    .transform.localScale = new Vector3(0.55f, 0.55f, 1f);
+            }
+        }
+
+        // ---------- 地面 ----------
+
+        private static void BuildGround(Transform parent, ArtLibrary lib)
+        {
+            var ground = new GameObject("Ground");
+            ground.transform.SetParent(parent, false);
+
+            var floor = SpriteObj("Cobblestone", ground.transform, lib.cobblestone,
+                new Vector3(0f, (GroundTop + GroundBottom) * 0.5f, 0f), "Background", -10);
+            var fsr = floor.GetComponent<SpriteRenderer>();
+            fsr.drawMode = SpriteDrawMode.Tiled;
+            fsr.size = new Vector2(WorldHalfWidth * 2f, GroundTop - GroundBottom);
+
+            var wall = SpriteObj("BackStoneWall", ground.transform, lib.stoneWall,
+                new Vector3(0f, 0.4f, 0f), "Midground", 0);
+            var wsr = wall.GetComponent<SpriteRenderer>();
+            wsr.drawMode = SpriteDrawMode.Tiled;
+            wsr.size = new Vector2(WorldHalfWidth * 2f, 0.8f);
+
+            var bottom = new GameObject("LaneBottomCollider");
+            bottom.transform.SetParent(parent, false);
+            bottom.transform.position = new Vector3(0f, -2.95f, 0f);
+            bottom.layer = Layer("Wall");
+            bottom.AddComponent<BoxCollider2D>().size = new Vector2(WorldHalfWidth * 2f, 0.3f);
+
+            var top = new GameObject("LaneTopCollider");
+            top.transform.SetParent(parent, false);
+            top.transform.position = new Vector3(0f, 0.35f, 0f);
+            top.layer = Layer("Wall");
+            top.AddComponent<BoxCollider2D>().size = new Vector2(WorldHalfWidth * 2f, 0.3f);
+        }
+
+        // ---------- 飞檐建筑 ----------
+
+        private static void BuildTempleLayer(Transform parent, ArtLibrary lib)
+        {
+            if (lib.templeRoof == null) return;
+
+            var layer = LayerRoot(parent, "TempleLayer", 1f);
+            float[] slots = { -34f, 36f, -96f, 98f };
+            foreach (var x in slots)
+            {
+                var go = SpriteObj("TempleRoof", layer, lib.templeRoof,
+                    new Vector3(x, 3f, 0f), "Midground", 4);
+                go.transform.localScale = new Vector3(0.75f, 0.75f, 1f);
+            }
+        }
+
+        // ---------- 村舍 ----------
+
+        private static void BuildVillage(Transform parent, ArtLibrary lib)
+        {
+            var village = LayerRoot(parent, "Village", 1f);
+
+            for (var x = -84f; x <= 84f; x += 14f)
+            {
+                if (Mathf.Abs(x) < 10f) continue;
+                var big = Mathf.Abs(x) % 28f < 14f;
+                if (big)
+                    SpriteObj("RuralHouseBig", village, lib.ruralHouseBig,
+                        new Vector3(x, 3f, 0f), "Midground", YOrder(0f) + 5);
+                else
+                    SpriteObj("RuralHouseSmall", village, lib.ruralHouseSmall,
+                        new Vector3(x, 2f, 0f), "Midground", YOrder(0f) + 5);
+            }
+
+            var house = SpriteObj("OldHouse", village, lib.ruralHouseBig,
+                new Vector3(0f, 3.2f, 0f), "Midground", 600);
+            house.transform.localScale = new Vector3(1.1f, 1.1f, 1f);
+
+            var marker = house.AddComponent<HouseMarker>();
+            var door = new GameObject("HouseDoor");
+            door.transform.SetParent(house.transform, false);
+            door.transform.localPosition = new Vector3(0f, -4.4f, 0f);
+            marker.doorAnchor = door.transform;
+
+            SpriteObj("RuralHouseNeighborL", village, lib.ruralHouseSmall,
+                new Vector3(-10f, 2f, 0f), "Midground", 5);
+            SpriteObj("RuralHouseNeighborR", village, lib.ruralHouseSmall,
+                new Vector3(10f, 2f, 0f), "Midground", 5);
+
+            SpriteObj("LaundryL", village, lib.laundry, new Vector3(-36f, 1.6f, 0f), "Midground", 6);
+            SpriteObj("LaundryR", village, lib.laundry, new Vector3(37f, 1.6f, 0f), "Midground", 6);
+            SpriteObj("CornRackL", village, lib.cornRack, new Vector3(-42f, 1f, 0f), "Midground", 7);
+            SpriteObj("CornRackR", village, lib.cornRack, new Vector3(42f, 1f, 0f), "Midground", 7);
+        }
+
+        // ---------- 植被 ----------
+
+        private static void BuildVegetation(Transform parent, ArtLibrary lib)
+        {
+            var veg = LayerRoot(parent, "Vegetation", 1f);
+
+            float[] banyans = { -70f, 70f };
+            foreach (var x in banyans)
+                SpriteObj("Banyan", veg, lib.banyan, new Vector3(x, 2.25f, 0f), "Midground", 400);
+
+            float[] groves = { -78f, -62f, -46f, -30f, 30f, 46f, 62f, 78f };
+            foreach (var x in groves)
+            {
+                var go = SpriteObj("BambooGrove", veg, lib.bambooGrove,
+                    new Vector3(x, 3f, 0f), "Midground", 300);
+                go.transform.localScale = new Vector3(0.55f, 0.55f, 1f);
+            }
+        }
+
+        // ---------- 道具 ----------
+
+        private static void BuildProps(Transform parent, ArtLibrary lib)
+        {
+            var props = LayerRoot(parent, "Near_Props", 1f);
+
+            for (var x = -76f; x <= 76f; x += 16f)
+            {
+                var go = SpriteObj("StoneLantern", props, lib.stoneLantern,
+                    new Vector3(x, -0.9f, 0f), "Props", YOrder(-0.9f));
+                go.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
+            }
+
+            float[] wells = { -54f, 54f };
+            foreach (var x in wells)
+                SpriteObj("Well", props, lib.well, new Vector3(x, -0.9f, 0f), "Props", YOrder(-0.9f));
+
+            float[] rocks = { -68f, -34f, -4f, 22f, 58f, 86f };
+            foreach (var x in rocks)
+            {
+                var go = SpriteObj("RockCluster", props, lib.rockCluster,
+                    new Vector3(x, -2.6f, 0f), "Props", YOrder(-2.6f));
+                go.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
+            }
+
+            float[] cans = { -24f, -12f, 12f, 24f };
+            foreach (var x in cans)
+                SpriteObj("TrashCan", props, lib.trashCan, new Vector3(x, -1.2f, 0f), "Props", YOrder(-1.2f));
+
+            float[] bikes = { -18f, 18f };
+            foreach (var x in bikes)
+                SpriteObj("Bicycle", props, lib.bicycle, new Vector3(x, -1.2f, 0f), "Props", YOrder(-1.2f));
+
+            float[] steps = { -44f, -6f, 6f, 44f };
+            foreach (var x in steps)
+                SpriteObj("StoneStep", props, lib.stoneStep, new Vector3(x, -0.15f, 0f), "Props", YOrder(-0.15f));
+        }
+
+        // ---------- 雾 ----------
+
+        private static void BuildMist(Transform parent, ArtLibrary lib)
+        {
+            if (lib.mistBand == null) return;
+
+            var mist = LayerRoot(parent, "Mist_3", 0.55f);
+            var a = SpriteObj("MistHigh", mist, lib.mistBand, new Vector3(0f, 4.6f, 0f), "Midground", 20);
+            a.transform.localScale = new Vector3(5f, 0.7f, 1f);
+
+            var mist2 = LayerRoot(parent, "Mist_2", 0.4f);
+            var b = SpriteObj("MistMid", mist2, lib.mistBand, new Vector3(10f, 2.8f, 0f), "Midground", 21);
+            b.transform.localScale = new Vector3(4f, 0.6f, 1f);
+
+            var mist1 = LayerRoot(parent, "Mist_1", 0.25f);
+            var c = SpriteObj("MistLow", mist1, lib.mistBand, new Vector3(-8f, 0.9f, 0f), "Midground", 22);
+            c.transform.localScale = new Vector3(3f, 0.5f, 1f);
+
+            var low = LayerRoot(parent, "Mist_Ground", 1.05f);
+            var d = SpriteObj("MistGround", low, lib.mistBand, new Vector3(0f, -3.2f, 0f), "FX", 300);
+            d.transform.localScale = new Vector3(5f, 0.5f, 1f);
+        }
+
+        // ---------- 光柱 ----------
+
+        private static void BuildLightShafts(Transform parent, ArtLibrary lib)
+        {
+            if (lib.lightShaft == null) return;
+
+            var shafts = LayerRoot(parent, "LightShafts", 0.02f);
+            float[] xs = { -42f, 0f, 40f };
+            foreach (var x in xs)
+            {
+                var go = SpriteObj("Shaft", shafts, lib.lightShaft,
+                    new Vector3(x, 3.5f, 0f), "FX", 100);
+                go.transform.localScale = new Vector3(1.6f, 1.6f, 1f);
+            }
+        }
+
+        // ---------- 前景框景 ----------
+
+        private static void BuildForeground(Transform parent, ArtLibrary lib)
+        {
+            var fg = LayerRoot(parent, "Foreground", 1.12f);
+
+            var left = SpriteObj("TreeLeft", fg, lib.treeForeground,
+                new Vector3(-15f, 4f, 0f), "FX", 600);
+            left.transform.localScale = new Vector3(0.7f, 0.7f, 1f);
+
+            if (lib.branchOverhead != null)
+            {
+                var branch = SpriteObj("BranchOverhead", fg, lib.branchOverhead,
+                    new Vector3(0f, 4.8f, 0f), "FX", 700);
+                branch.transform.localScale = new Vector3(0.85f, 0.85f, 1f);
+            }
+
+            var grass = SpriteObj("Grass", fg, lib.grass, new Vector3(0f, -4.4f, 0f), "FX", 400);
+            var gsr = grass.GetComponent<SpriteRenderer>();
+            gsr.drawMode = SpriteDrawMode.Tiled;
+            gsr.size = new Vector2(WorldHalfWidth * 2f + 24f, 1f);
+
+            var step = SpriteObj("ForeStoneStep", fg, lib.stoneStep, new Vector3(0f, -5.2f, 0f), "FX", 390);
+            var ssr = step.GetComponent<SpriteRenderer>();
+            ssr.drawMode = SpriteDrawMode.Tiled;
+            ssr.size = new Vector2(WorldHalfWidth * 2f + 24f, 0.5f);
+        }
+
+        // ---------- 落花 ----------
+
+        private static void BuildPetals(Transform parent, ArtLibrary lib)
+        {
+            if (lib.petal == null) return;
+
+            var go = new GameObject("Petals");
+            go.transform.SetParent(parent, false);
+            go.transform.position = new Vector3(0f, 4f, 0f);
+
+            var ps = go.AddComponent<ParticleSystem>();
+
+            var main = ps.main;
+            main.loop = true;
+            main.startLifetime = 14f;
+            main.startSpeed = 0.4f;
+            main.startSize = 0.18f;
+            Color petalColor = new Color32(217, 139, 160, 255);
+            main.startColor = petalColor;
+            main.maxParticles = 240;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.gravityModifier = 0.015f;
+
+            var emission = ps.emission;
+            emission.rateOverTime = 18f;
+
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Box;
+            shape.scale = new Vector3(70f, 0.5f, 1f);
+
+            var velocity = ps.velocityOverLifetime;
+            velocity.enabled = true;
+            velocity.space = ParticleSystemSimulationSpace.World;
+            velocity.x = new ParticleSystem.MinMaxCurve(-0.5f, 0.5f);
+            velocity.y = new ParticleSystem.MinMaxCurve(-0.8f, -0.25f);
+            velocity.z = new ParticleSystem.MinMaxCurve(0f, 0f); // 三条曲线必须同为 Two Constants
+
+
+            var rotation = ps.rotationOverLifetime;
+            rotation.enabled = true;
+            rotation.z = new ParticleSystem.MinMaxCurve(-1.2f, 1.2f);
+
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.sortingLayerName = "FX";
+            renderer.sortingOrder = 650;
+            renderer.sharedMaterial = EnsurePetalMaterial(lib.petal);
+        }
+
+        private static Material EnsurePetalMaterial(Sprite petal)
+        {
+            const string path = "Assets/_Game/Art/Generated/M_Petal.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null)
+            {
+                mat = new Material(Shader.Find("Sprites/Default"));
+                AssetDatabase.CreateAsset(mat, path);
+            }
+            mat.mainTexture = petal.texture;
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        // ---------- 玩家与出生口 ----------
+
+        private static void BuildPlayer(Transform parent, ArtLibrary lib, CameraFollow follow)
+        {
+            var player = SpriteObj("PlayerPlaceholder", parent, lib.slingshot,
+                new Vector3(0f, -1.5f, 0f), "Characters", YOrder(-1.5f) + 1000);
+            player.layer = Layer("Player");
+            player.transform.localScale = new Vector3(1.4f, 1.4f, 1f);
+            player.AddComponent<YSorter>().scale = 100f;
+            player.AddComponent<DebugMover>();
+
+            var shadow = SpriteObj("PlayerShadow", player.transform, lib.shadow,
+                new Vector3(0f, -0.55f, 0f), "Characters", YOrder(-2.05f) + 999);
+            shadow.transform.localPosition = new Vector3(0f, -0.55f, 0f);
+
+            follow.target = player.transform;
+        }
+
+        private static void BuildSpawns(Transform parent)
+        {
+            Spawn(parent, "Spawn_Left", SpawnKind.Left, new Vector3(-WorldHalfWidth - 1f, -1.5f, 0f));
+            Spawn(parent, "Spawn_Right", SpawnKind.Right, new Vector3(WorldHalfWidth + 1f, -1.5f, 0f));
+            Spawn(parent, "Spawn_Back", SpawnKind.Back, new Vector3(0f, -3.6f, 0f));
+        }
+
+        private static void Spawn(Transform parent, string name, SpawnKind kind, Vector3 pos)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.position = pos;
+            go.AddComponent<SpawnPoint>().kind = kind;
+        }
+
+        // ---------------- 工具 ----------------
+
+        private static Transform LayerRoot(Transform parent, string name, float depth)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<ParallaxLayer>().depth = depth;
+            return go.transform;
+        }
+
+        private static int YOrder(float y)
+        {
+            return -Mathf.RoundToInt(y * 100f);
+        }
+
+        private static GameObject SpriteObj(string name, Transform parent, Sprite sprite, Vector3 pos,
+            string sortingLayer, int order)
+        {
+            var go = new GameObject(name, typeof(SpriteRenderer));
+            go.transform.SetParent(parent, false);
+            go.transform.position = pos;
+
+            var sr = go.GetComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingLayerName = sortingLayer;
+            sr.sortingOrder = order;
+            return go;
+        }
+
+        private static int Layer(string name)
+        {
+            var layer = LayerMask.NameToLayer(name);
+            return layer < 0 ? 0 : layer;
+        }
+
+        // ---------------- Pixel Perfect ----------------
+
+        private static void TrySetupPixelPerfect(Camera cam)
+        {
+            var type = FindType("UnityEngine.U2D.PixelPerfectCamera");
+            if (type == null)
+            {
+                Debug.LogWarning("[Stage2] 未找到 PixelPerfectCamera；已锁定 ortho size = 5.625 并关闭 MSAA。");
+                return;
+            }
+
+            var comp = cam.GetComponent(type);
+            if (comp == null) comp = cam.gameObject.AddComponent(type);
+
+            SetMember(comp, "assetsPPU", 16);
+            SetMember(comp, "refResolutionX", 320);
+            SetMember(comp, "refResolutionY", 180);
+            SetMember(comp, "upscaleRT", true);
+            SetMember(comp, "pixelSnapping", true);
+            SetMember(comp, "cropFrameX", false);
+            SetMember(comp, "cropFrameY", false);
+            SetMember(comp, "stretchFill", false);
+
+            Debug.Log("[Stage2] PixelPerfectCamera 已配置：320x180 / PPU16 / UpscaleRT");
+        }
+
+        private static System.Type FindType(string fullName)
+        {
+            var assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
+            for (var i = 0; i < assemblies.Length; i++)
+            {
+                var type = assemblies[i].GetType(fullName);
+                if (type != null) return type;
+            }
+            return null;
+        }
+
+        private static void SetMember(object target, string name, object value)
+        {
+            var type = target.GetType();
+
+            var prop = type.GetProperty(name);
+            if (prop != null && prop.CanWrite)
+            {
+                prop.SetValue(target, value);
+                return;
+            }
+
+            var field = type.GetField(name);
+            if (field != null) field.SetValue(target, value);
+        }
+
+        // ---------------- Tag / Layer ----------------
+
+        private static void EnsureTagsAndLayers()
+        {
+            var assets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+            if (assets == null || assets.Length == 0) return;
+
+            var so = new SerializedObject(assets[0]);
+
+            EnsureSortingLayer(so, "Background", 1001);
+            EnsureSortingLayer(so, "Midground", 1002);
+            EnsureSortingLayer(so, "Props", 1003);
+            EnsureSortingLayer(so, "Characters", 1004);
+            EnsureSortingLayer(so, "FX", 1005);
+            EnsureSortingLayer(so, "UIWorld", 1006);
+
+            EnsureLayer(so, 8, "Player");
+            EnsureLayer(so, 9, "Enemy");
+            EnsureLayer(so, 10, "Projectile");
+            EnsureLayer(so, 11, "Wall");
+            EnsureLayer(so, 12, "Pickup");
+
+            so.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void EnsureSortingLayer(SerializedObject so, string name, int uniqueId)
+        {
+            var layers = so.FindProperty("m_SortingLayers");
+            if (layers == null) return;
+
+            for (var i = 0; i < layers.arraySize; i++)
+            {
+                var element = layers.GetArrayElementAtIndex(i);
+                if (element.FindPropertyRelative("name").stringValue == name) return;
+            }
+
+            layers.InsertArrayElementAtIndex(layers.arraySize);
+            var added = layers.GetArrayElementAtIndex(layers.arraySize - 1);
+            added.FindPropertyRelative("name").stringValue = name;
+            added.FindPropertyRelative("uniqueID").intValue = uniqueId;
+        }
+
+        private static void EnsureLayer(SerializedObject so, int index, string name)
+        {
+            var layers = so.FindProperty("layers");
+            if (layers == null || index >= layers.arraySize) return;
+
+            var element = layers.GetArrayElementAtIndex(index);
+            if (string.IsNullOrEmpty(element.stringValue)) element.stringValue = name;
+        }
+
+        private static string PrepareUnsavedScene()
+        {
+            var active = SceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(active.path)) return null;
+
+            const string tempPath = "Assets/_Game/Scenes/_Stage2Temp.unity";
+            EditorSceneManager.SaveScene(active, tempPath, false);
+            return tempPath;
+        }
+    }
+}

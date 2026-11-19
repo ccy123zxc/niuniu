@@ -1,0 +1,180 @@
+using OldAlley.CameraSystem;
+using OldAlley.Core;
+using OldAlley.Enemy;
+using OldAlley.Player;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace OldAlley.EditorTools
+{
+    /// <summary>
+    /// Stage 3：把场景里的替身换成真正的玩家（Rigidbody2D + 弹弓 + 子弹池），并放 3 个假人。
+    /// 菜单可重复执行。
+    /// </summary>
+    public static class Stage3_SceneBuilder
+    {
+        private const string GameScene = "Assets/_Game/Scenes/Game.unity";
+        private const string LibPath = "Assets/_Game/Data/ArtLibrary.asset";
+        private const string ConfigPath = "Assets/_Game/Data/GameConfig.asset";
+
+        [MenuItem("旧巷守卫/3-构建玩家与射击")]
+        public static void Run()
+        {
+            var lib = AssetDatabase.LoadAssetAtPath<ArtLibrary>(LibPath);
+            var config = AssetDatabase.LoadAssetAtPath<GameConfig>(ConfigPath);
+
+            if (lib == null || config == null)
+            {
+                Debug.LogError("[Stage3] 缺少 ArtLibrary 或 GameConfig。");
+                return;
+            }
+
+            var temp = PrepareUnsavedScene();
+            try
+            {
+                var scene = EditorSceneManager.OpenScene(GameScene, OpenSceneMode.Single);
+                Build(lib, config);
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                Debug.Log("[Stage3] 玩家与弹弓射击构建完成");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temp)) AssetDatabase.DeleteAsset(temp);
+            }
+        }
+
+        private static void Build(ArtLibrary lib, GameConfig config)
+        {
+            var oldPlayer = GameObject.Find("PlayerPlaceholder");
+            if (oldPlayer != null) UnityEngine.Object.DestroyImmediate(oldPlayer);
+
+            var oldStage = GameObject.Find("[Stage3]");
+            if (oldStage != null) UnityEngine.Object.DestroyImmediate(oldStage);
+
+            var stage = new GameObject("[Stage3]");
+
+            var pool = BuildPool(stage.transform, lib, config);
+            var player = BuildPlayer(stage.transform, lib, config, pool);
+            BuildDummies(stage.transform, lib);
+
+            var follow = Camera.main != null ? Camera.main.GetComponent<CameraFollow>() : null;
+            if (follow != null) follow.target = player.transform;
+        }
+
+        private static ProjectilePool BuildPool(Transform parent, ArtLibrary lib, GameConfig config)
+        {
+            var poolGo = new GameObject("ProjectilePool", typeof(ProjectilePool));
+            poolGo.transform.SetParent(parent, false);
+            var pool = poolGo.GetComponent<ProjectilePool>();
+
+            var templateGo = new GameObject("ProjectileTemplate",
+                typeof(SpriteRenderer), typeof(Rigidbody2D), typeof(CircleCollider2D), typeof(Projectile));
+            templateGo.transform.SetParent(poolGo.transform, false);
+
+            var sr = templateGo.GetComponent<SpriteRenderer>();
+            sr.sprite = lib.stone;
+            sr.sortingLayerName = "FX";
+            sr.sortingOrder = 800;
+
+            var rb = templateGo.GetComponent<Rigidbody2D>();
+            rb.bodyType = RigidbodyType2D.Dynamic;
+            rb.gravityScale = 0f;
+            rb.freezeRotation = true;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+
+            var col = templateGo.GetComponent<CircleCollider2D>();
+            col.radius = 0.12f;
+            col.isTrigger = true;
+
+            templateGo.layer = Layer("Projectile");
+            templateGo.SetActive(false);
+
+            pool.template = templateGo.GetComponent<Projectile>();
+            pool.size = config.projectilePoolSize;
+            return pool;
+        }
+
+        private static GameObject BuildPlayer(Transform parent, ArtLibrary lib, GameConfig config, ProjectilePool pool)
+        {
+            var go = new GameObject("Player",
+                typeof(SpriteRenderer), typeof(Rigidbody2D), typeof(CapsuleCollider2D),
+                typeof(PlayerController), typeof(Slingshot));
+            go.transform.SetParent(parent, false);
+            go.transform.position = new Vector3(0f, -1.5f, 0f);
+            go.layer = Layer("Player");
+
+            var sr = go.GetComponent<SpriteRenderer>();
+            sr.sprite = lib.playerBoy;
+            sr.sortingLayerName = "Characters";
+            sr.sortingOrder = 1200;
+
+            var rb = go.GetComponent<Rigidbody2D>();
+            rb.bodyType = RigidbodyType2D.Dynamic;
+            rb.gravityScale = 0f;
+            rb.freezeRotation = true;
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+
+            var col = go.GetComponent<CapsuleCollider2D>();
+            col.size = new Vector2(0.45f, 0.9f);
+            col.direction = CapsuleDirection2D.Vertical;
+
+            var controller = go.GetComponent<PlayerController>();
+            controller.config = config;
+            controller.body = sr;
+            controller.slingshot = go.GetComponent<Slingshot>();
+
+            var slingshot = go.GetComponent<Slingshot>();
+            slingshot.config = config;
+            slingshot.pool = pool;
+            slingshot.muzzle = sr;
+
+            return go;
+        }
+
+        private static void BuildDummies(Transform parent, ArtLibrary lib)
+        {
+            float[] positions = { -7f, 5f, 11f };
+
+            foreach (var x in positions)
+            {
+                var go = new GameObject("Dummy",
+                    typeof(SpriteRenderer), typeof(BoxCollider2D), typeof(Dummy));
+                go.transform.SetParent(parent, false);
+                go.transform.position = new Vector3(x, -1.2f, 0f);
+                go.layer = Layer("Enemy");
+
+                var sr = go.GetComponent<SpriteRenderer>();
+                sr.sprite = lib.wildChicken;
+                sr.sortingLayerName = "Characters";
+                sr.sortingOrder = 1150;
+
+                var col = go.GetComponent<BoxCollider2D>();
+                col.size = new Vector2(0.8f, 1.2f);
+
+                var dummy = go.GetComponent<Dummy>();
+                dummy.hp = 999;
+                dummy.body = sr;
+            }
+        }
+
+        private static int Layer(string name)
+        {
+            var layer = LayerMask.NameToLayer(name);
+            return layer < 0 ? 0 : layer;
+        }
+
+        private static string PrepareUnsavedScene()
+        {
+            var active = SceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(active.path)) return null;
+
+            const string tempPath = "Assets/_Game/Scenes/_Stage3Temp.unity";
+            EditorSceneManager.SaveScene(active, tempPath, false);
+            return tempPath;
+        }
+    }
+}

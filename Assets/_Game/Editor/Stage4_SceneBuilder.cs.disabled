@@ -1,0 +1,192 @@
+using OldAlley.CameraSystem;
+using OldAlley.Core;
+using OldAlley.Enemy;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace OldAlley.EditorTools
+{
+    /// <summary>
+    /// Stage 4：创建 4 种 EnemyStats，把 HouseController 挂到老屋，
+    /// 建 32 个敌人的对象池与测试刷怪器。菜单可重复执行。
+    /// </summary>
+    public static class Stage4_SceneBuilder
+    {
+        private const string GameScene = "Assets/_Game/Scenes/Game.unity";
+        private const string LibPath = "Assets/_Game/Data/ArtLibrary.asset";
+
+        [MenuItem("旧巷守卫/4-构建敌人与寻路")]
+        public static void Run()
+        {
+            var lib = AssetDatabase.LoadAssetAtPath<ArtLibrary>(LibPath);
+            if (lib == null)
+            {
+                Debug.LogError("[Stage4] 缺少 ArtLibrary。");
+                return;
+            }
+
+            var stats = EnsureStats(lib);
+
+            var temp = PrepareUnsavedScene();
+            try
+            {
+                var scene = EditorSceneManager.OpenScene(GameScene, OpenSceneMode.Single);
+                Build(lib, stats);
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                Debug.Log("[Stage4] 敌人与寻路构建完成");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temp)) AssetDatabase.DeleteAsset(temp);
+            }
+        }
+
+        // ---------- 数值资产 ----------
+
+        private static EnemyStats[] EnsureStats(ArtLibrary lib)
+        {
+            return new[]
+            {
+                EnsureOne("Enemy_Kid", "野鸡", 30, 1.6f, 8, 0.6f, 10,
+                    Color.white, 1.0f, lib.wildChicken),
+                EnsureOne("Enemy_Speeder", "野狗", 18, 2.6f, 5, 0.62f, 15,
+                    Color.white, 1.2f, lib.wildDog),
+                EnsureOne("Enemy_Fatty", "水牛", 90, 1.0f, 15, 0.75f, 25,
+                    Color.white, 0.8f, lib.waterBuffalo),
+                EnsureOne("Enemy_King", "野猪王", 320, 0.9f, 30, 0.75f, 100,
+                    Color.white, 0.3f, lib.wildBoarKing)
+            };
+        }
+
+        private static EnemyStats EnsureOne(string assetName, string displayName, int hp, float speed,
+            int damage, float scale, int score, Color tint, float weight, Sprite sprite)
+        {
+            var path = "Assets/_Game/Data/" + assetName + ".asset";
+            var stats = AssetDatabase.LoadAssetAtPath<EnemyStats>(path);
+
+            if (stats == null)
+            {
+                stats = ScriptableObject.CreateInstance<EnemyStats>();
+                AssetDatabase.CreateAsset(stats, path);
+                Debug.Log("[Stage4] 新建 " + path);
+            }
+
+            stats.displayName = displayName;
+            stats.hp = hp;
+            stats.speed = speed;
+            stats.damageToHouse = damage;
+            stats.scale = scale;
+            stats.score = score;
+            stats.tint = tint;
+            stats.weight = weight;
+            stats.sprite = sprite;
+
+            EditorUtility.SetDirty(stats);
+            return stats;
+        }
+
+        // ---------- 场景 ----------
+
+        private static void Build(ArtLibrary lib, EnemyStats[] stats)
+        {
+            var cam = Camera.main;
+            if (cam != null && cam.GetComponent<CameraShake>() == null)
+                cam.gameObject.AddComponent<CameraShake>();
+
+            var shake = cam != null ? cam.GetComponent<CameraShake>() : null;
+
+            var houseGo = GameObject.Find("OldHouse");
+            HouseController house = null;
+
+            if (houseGo != null)
+            {
+                house = houseGo.GetComponent<HouseController>();
+                if (house == null) house = houseGo.AddComponent<HouseController>();
+
+                house.body = houseGo.GetComponent<SpriteRenderer>();
+                house.doorAnchor = FindChild(houseGo.transform, "HouseDoor");
+                house.shake = shake;
+                house.maxHp = 100;
+
+                EditorUtility.SetDirty(house);
+            }
+
+            var old = GameObject.Find("[Stage4]");
+            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+
+            var stage = new GameObject("[Stage4]");
+
+            var poolGo = new GameObject("EnemyPool", typeof(EnemyPool));
+            poolGo.transform.SetParent(stage.transform, false);
+            var pool = poolGo.GetComponent<EnemyPool>();
+
+            var template = new GameObject("EnemyTemplate",
+                typeof(SpriteRenderer), typeof(Rigidbody2D), typeof(CircleCollider2D),
+                typeof(EnemyBase), typeof(YSorter));
+            template.transform.SetParent(poolGo.transform, false);
+            template.layer = Layer("Enemy");
+
+            var sr = template.GetComponent<SpriteRenderer>();
+            sr.sprite = lib.wildChicken;
+            sr.sortingLayerName = "Characters";
+            sr.sortingOrder = 1100;
+
+            var rb = template.GetComponent<Rigidbody2D>();
+            rb.bodyType = RigidbodyType2D.Kinematic;
+            rb.gravityScale = 0f;
+            rb.freezeRotation = true;
+
+            var col = template.GetComponent<CircleCollider2D>();
+            col.radius = 0.35f;
+
+            template.SetActive(false);
+
+            pool.template = template.GetComponent<EnemyBase>();
+            pool.house = house;
+            pool.size = 32;
+
+            var spawnerGo = new GameObject("DebugEnemySpawner", typeof(DebugEnemySpawner));
+            spawnerGo.transform.SetParent(stage.transform, false);
+            var spawner = spawnerGo.GetComponent<DebugEnemySpawner>();
+            spawner.pool = pool;
+            spawner.types = stats;
+            spawner.spawnOnStart = true;
+            spawner.count = 10;
+        }
+
+        private static Transform FindChild(Transform parent, string name)
+        {
+            if (parent == null) return null;
+
+            for (var i = 0; i < parent.childCount; i++)
+            {
+                var child = parent.GetChild(i);
+                if (child.name == name) return child;
+
+                var found = FindChild(child, name);
+                if (found != null) return found;
+            }
+
+            return null;
+        }
+
+        private static int Layer(string name)
+        {
+            var layer = LayerMask.NameToLayer(name);
+            return layer < 0 ? 0 : layer;
+        }
+
+        private static string PrepareUnsavedScene()
+        {
+            var active = SceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(active.path)) return null;
+
+            const string tempPath = "Assets/_Game/Scenes/_Stage4Temp.unity";
+            EditorSceneManager.SaveScene(active, tempPath, false);
+            return tempPath;
+        }
+    }
+}

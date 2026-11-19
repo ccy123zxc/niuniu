@@ -1,0 +1,68 @@
+using OldAlley.Audio;
+using OldAlley.CameraSystem;
+using OldAlley.Core;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace OldAlley.EditorTools
+{
+    /// <summary>
+    /// Stage 8：把 AudioManager 与 HitStop 挂进场景，确保相机有震动组件。
+    /// 菜单可重复执行。
+    /// </summary>
+    public static class Stage8_SceneBuilder
+    {
+        private const string GameScene = "Assets/_Game/Scenes/Game.unity";
+
+        [MenuItem("旧巷守卫/8-构建表现层")]
+        public static void Run()
+        {
+            var temp = PrepareUnsavedScene();
+            try
+            {
+                var scene = EditorSceneManager.OpenScene(GameScene, OpenSceneMode.Single);
+                Build();
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                Debug.Log("[Stage8] 表现层构建完成");
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temp)) AssetDatabase.DeleteAsset(temp);
+            }
+        }
+
+        private static void Build()
+        {
+            var cam = Camera.main;
+            if (cam != null && cam.GetComponent<CameraShake>() == null)
+                cam.gameObject.AddComponent<CameraShake>();
+
+            if (GameObject.Find("[AudioManager]") == null)
+                new GameObject("[AudioManager]", typeof(AudioManager));
+
+            var old = GameObject.Find("[Stage8]");
+            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+
+            var stage = new GameObject("[Stage8]");
+
+            if (UnityEngine.Object.FindObjectOfType<HitStop>() == null)
+            {
+                var hitStop = new GameObject("HitStop", typeof(HitStop));
+                hitStop.transform.SetParent(stage.transform, false);
+            }
+        }
+
+        private static string PrepareUnsavedScene()
+        {
+            var active = SceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(active.path)) return null;
+
+            const string tempPath = "Assets/_Game/Scenes/_Stage8Temp.unity";
+            EditorSceneManager.SaveScene(active, tempPath, false);
+            return tempPath;
+        }
+    }
+}

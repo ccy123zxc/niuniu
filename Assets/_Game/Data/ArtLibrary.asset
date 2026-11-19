@@ -1,0 +1,76 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10b07daf48b4cec48a1cec7c7705b54c, type: 3}
+  m_Name: ArtLibrary
+  m_EditorClassIdentifier: 
+  mountainFar: {fileID: 21300000, guid: 8c926a693deb7db4e876a9eb5c722dfa, type: 3}
+  mountainMid: {fileID: 21300000, guid: 5ce803c99c81f234b9db50ea5b9d99bb, type: 3}
+  cloud: {fileID: 21300000, guid: 674fc6d176f97d34ba5a06379b00941a, type: 3}
+  pagodaFar: {fileID: 21300000, guid: b71099af545160543853e42633f69747, type: 3}
+  templeRoof: {fileID: 21300000, guid: af68fa534a0033d4b96e9aba5544ab29, type: 3}
+  treeForeground: {fileID: 21300000, guid: 41510285bd249b74b95c466597b3b32f, type: 3}
+  branchOverhead: {fileID: 21300000, guid: 3d6ed071d6b392640914c8117d9da3b5, type: 3}
+  stoneLantern: {fileID: 21300000, guid: 63c7aac5ed9dbcf489778cc2402e61dc, type: 3}
+  rockCluster: {fileID: 21300000, guid: 45e7c78244892a2499464ec8113f6194, type: 3}
+  bambooGrove: {fileID: 21300000, guid: 2c936ec906b7028499e442f6fbce670b, type: 3}
+  mistBand: {fileID: 21300000, guid: 7750885f7c157b14e98fe75773475c2f, type: 3}
+  petal: {fileID: 21300000, guid: dc0eaa1fb1c40204aa604d403d4c1902, type: 3}
+  lightShaft: {fileID: 21300000, guid: 046bc2c79a84abb4087d7e0cd083ef19, type: 3}
+  mapGround: {fileID: 21300000, guid: 73e906a25c95b164b8eced05def257a3, type: 3}
+  gateSouth: {fileID: 21300000, guid: 02e23b495e955894b96809d318c21798, type: 3}
+  pigPen: {fileID: 21300000, guid: 7492bc1f526808240a225c00edb47355, type: 3}
+  stoneMill: {fileID: 21300000, guid: 0b0d3f57e211d8c489843faf7e3f90ca, type: 3}
+  woodPile: {fileID: 21300000, guid: 21d30466cfe4cad4a839fccdb65132b2, type: 3}
+  waterVat: {fileID: 21300000, guid: efd40f42b0508984c8cefea8307cb7bf, type: 3}
+  orchardTree: {fileID: 21300000, guid: e4d6399e0d182b444823415c2a90e28f, type: 3}
+  cobblestone: {fileID: 21300000, guid: 5c65d0c8992588a4bb964b0b09c50d53, type: 3}
+  stoneWall: {fileID: 21300000, guid: b80c3cb9f40071f4db08e7b4288236d2, type: 3}
+  tileRoof: {fileID: 21300000, guid: 32369e3db61714648920aea81d86ec6d, type: 3}
+  ruralHouseBig: {fileID: 21300000, guid: 6d801c7f84ff99f4785d6c9e75e667d0, type: 3}
+  ruralHouseSmall: {fileID: 21300000, guid: ad9c5183cc9ec814ea353743dbc82ccb, type: 3}
+  well: {fileID: 21300000, guid: 82f82644ff1aec24b80fe0fcf68472ad, type: 3}
+  cornRack: {fileID: 21300000, guid: e6aed8d8091137d44a6d09eb2adfc499, type: 3}
+  lantern: {fileID: 21300000, guid: 36dc039e6523a8b4180208917fde4bf7, type: 3}
+  laundry: {fileID: 21300000, guid: 0d6da18a3f154944f953a6bbf7bd8c57, type: 3}
+  stoneStep: {fileID: 21300000, guid: 3b2632b360b4b6140a52cef5c5a97e1a, type: 3}
+  bamboo: {fileID: 21300000, guid: c7bbb11ec31ac7947bbd9dc21fdd84c7, type: 3}
+  banyan: {fileID: 21300000, guid: 9feb5f6525768cc4285bc21ca5c584fa, type: 3}
+  grass: {fileID: 21300000, guid: fbabb22cf907731479fd86d2855623eb, type: 3}
+  utilityPole: {fileID: 21300000, guid: 1f184f2031cb83d44b6389628b3c02c0, type: 3}
+  trashCan: {fileID: 21300000, guid: 763c092272a04ca428465c4cc17a0e84, type: 3}
+  bicycle: {fileID: 21300000, guid: 083592190a63b2043ac41e77d3b0d927, type: 3}
+  playerBoy: {fileID: 21300000, guid: db34f0b74d88ec84dba942801c1d6833, type: 3}
+  wildChicken: {fileID: 21300000, guid: bd8fe2426941a5b48a7a061a76f90528, type: 3}
+  wildDog: {fileID: 21300000, guid: 4e165ab5a5185274e82ce7534c5754c5, type: 3}
+  waterBuffalo: {fileID: 21300000, guid: b20a9707eed6d9b4bb93c58f0ffaf2e8, type: 3}
+  wildBoarKing: {fileID: 21300000, guid: b6b9cb48c6c2a61479770b69a7089e50, type: 3}
+  kidA: {fileID: 21300000, guid: 8382980c441958545b7c0c9164fdffc9, type: 3}
+  kidB: {fileID: 21300000, guid: 7bcf7c80f632eef44afb4350381b3399, type: 3}
+  speeder: {fileID: 21300000, guid: 31906361eca715c4d89aef763e50baa3, type: 3}
+  fatty: {fileID: 21300000, guid: 6c0acc3666dca9c4d852ccca22f1b617, type: 3}
+  king: {fileID: 21300000, guid: be25a80b57e62ff468d9c35c1e000aea, type: 3}
+  slingshot: {fileID: 21300000, guid: d32dbaba95dc38c40b3acab7fa7e3e6d, type: 3}
+  stone: {fileID: 21300000, guid: d2d473cb091438d4dbfbc35ffe4099d4, type: 3}
+  bubblegum: {fileID: 21300000, guid: 8d2a40ebbcf703540ae83359554fe0f6, type: 3}
+  tinFrog: {fileID: 21300000, guid: 02b78b1be8336444293453bb18b065b5, type: 3}
+  marble: {fileID: 21300000, guid: dc29c3bbaacdc364ea87c85f4ac7ebba, type: 3}
+  latiao: {fileID: 21300000, guid: f8e403bee828de0468810c8eba794ff0, type: 3}
+  shadow: {fileID: 21300000, guid: da0d8295695d15c47aa99a846e7afa43, type: 3}
+  oldHouse: {fileID: 21300000, guid: 3b53ddabfcf13e74fabbf8c5920dc202, type: 3}
+  concreteFloor: {fileID: 21300000, guid: 3fc570f3f881add4690486b82e0d5378, type: 3}
+  brickWall: {fileID: 21300000, guid: a067d7bbb771ca94993201b8003bfc7b, type: 3}
+  door: {fileID: 21300000, guid: 39ebe1011c9f7574bae45a750fa124b0, type: 3}
+  window: {fileID: 21300000, guid: aee2c93d63de7994a9016d3b5d19e04b, type: 3}
+  planeTree: {fileID: 21300000, guid: 03dfeede1fb3c744081780302fa6fb87, type: 3}
+  streetLamp: {fileID: 21300000, guid: e62c6d446ccfdac4db2c6fc61fc73ec8, type: 3}
+  roofFar: {fileID: 21300000, guid: a9b1910de9e6d644fbdf5c00a69bf476, type: 3}
+  roofTile: {fileID: 21300000, guid: 69b325f31e4a4484d8417d96ef4137ea, type: 3}
